@@ -1,0 +1,71 @@
+# Example config for the recurring-issue silver.accounts handoff.
+# Targets the known problems: duplicate account_id, null email, type drift.
+
+table: lakehouse.silver.accounts
+
+sampling:
+  strategy: fraction
+  fraction: 0.05
+  seed: 42
+  min_rows: 100000
+
+expected_schema:
+  account_id: string
+  customer_id: string
+  email: string
+  created_at: timestamp
+  updated_at: timestamp
+  balance: double
+
+checks:
+  nulls:
+    - column: account_id
+      max_null_pct: 0.0
+      severity: FAIL
+    - column: customer_id
+      max_null_pct: 0.0
+      severity: FAIL
+    - column: email
+      max_null_pct: 0.01
+      severity: WARN
+
+  duplicates:
+    - subset: [account_id]
+      max_duplicate_pct: 0.0
+      severity: FAIL
+
+  ranges:
+    - column: balance
+      min: 0
+      max: 10000000
+      severity: FAIL
+
+  regex:
+    - column: email
+      pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+      max_fail_pct: 0.01
+      severity: WARN
+
+  foreign_keys:
+    - column: customer_id
+      ref_table: lakehouse.silver.customers
+      ref_column: customer_id
+      max_orphan_pct: 0.0
+      severity: FAIL
+
+  freshness:
+    - column: updated_at
+      max_age_hours: 24
+      severity: WARN
+
+  drift:
+    - column: balance
+      metric: mean
+      baseline: last_n_runs
+      n: 5
+      max_pct_delta: 0.20
+      severity: WARN
+
+thresholds:
+  warn_default: 0.01
+  fail_default: 0.05
